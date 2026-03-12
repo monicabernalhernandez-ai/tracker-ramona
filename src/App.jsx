@@ -30,7 +30,9 @@ function formatDateShort(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short" });
 }
-function todayStr() { return new Date().toISOString().split("T")[0]; }
+function todayStr() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+}
 function minuteDiff(start, end) {
   const s = new Date(`2000-01-01T${start}`);
   const e = new Date(`2000-01-01T${end}`);
