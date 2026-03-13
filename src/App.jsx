@@ -253,14 +253,12 @@ function GuideTab() {
       {/* Sleep section */}
       <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: pastel.muted, marginBottom: 12 }}>😴 Siestas</div>
       <InfoCard icon="⏱" color="#6B4C9E" title="Horas de sueño diurno" value={guide.napHours ? `${guide.napHours} horas al día` : null} />
-      <InfoCard icon="🕐" color="#6B4C9E" title="Horario aproximado" value={null} sub={guide.napSchedule || null}
-        {...(guide.napSchedule ? { value: " ", sub: guide.napSchedule } : {})} />
+      <InfoCard icon="🕐" color="#6B4C9E" title="Horario aproximado" value={guide.napSchedule ? " " : null} sub={guide.napSchedule || null} />
 
       {/* Feed section */}
       <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: pastel.muted, marginBottom: 12, marginTop: 8 }}>🍼 Leche</div>
       <InfoCard icon="🥛" color="#B05020" title="Cantidad por toma" value={guide.feedOz ? `${guide.feedOz} oz por toma` : null} />
-      <InfoCard icon="🕐" color="#B05020" title="Horario aproximado"
-        {...(guide.feedSchedule ? { value: " ", sub: guide.feedSchedule } : { value: null })} />
+      <InfoCard icon="🕐" color="#B05020" title="Horario aproximado" value={guide.feedSchedule ? " " : null} sub={guide.feedSchedule || null} />
       {guide.feedNotes && (
         <div style={{ background: "#FFFBF0", border: "2px solid #FFE9B0", borderRadius: 16, padding: "12px 16px", fontSize: 13, color: "#7A5C00", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
           📝 {guide.feedNotes}
@@ -562,10 +560,6 @@ export default function App() {
             </div>
           </div>
         )}
-      </div>
-    </>
-  );
-}
       </div>
     </>
   );
