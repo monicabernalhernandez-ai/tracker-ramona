@@ -183,6 +183,157 @@ function HistoryTab({ onSelectDay }) {
   );
 }
 
+// ─── Guide Tab ────────────────────────────────────────────────────────────────
+const DEFAULT_GUIDE = {
+  month: 1,
+  napHours: "",
+  napSchedule: "",
+  feedOz: "",
+  feedSchedule: "",
+  feedNotes: "",
+};
+
+function GuideTab() {
+  const [guide, setGuide] = useState(DEFAULT_GUIDE);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(DEFAULT_GUIDE);
+  const [synced, setSynced] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "guide"), snap => {
+      if (snap.exists()) setGuide(snap.data());
+      setSynced(true);
+    });
+    return () => unsub();
+  }, []);
+
+  function startEdit() { setDraft(guide); setEditing(true); }
+  async function saveGuide() {
+    await setDoc(doc(db, "config", "guide"), draft);
+    setGuide(draft);
+    setEditing(false);
+  }
+
+  const months = Array.from({ length: 24 }, (_, i) => i + 1);
+
+  const InfoCard = ({ icon, color, bg, title, value, sub }) => (
+    <div style={{ background: "white", borderRadius: 20, padding: "16px 18px", marginBottom: 12, boxShadow: "0 2px 12px rgba(0,0,0,0.05)", border: `2px solid ${pastel.border}`, display: "flex", gap: 14, alignItems: "flex-start" }}>
+      <div style={{ fontSize: 28, lineHeight: 1, marginTop: 2 }}>{icon}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: pastel.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>{title}</div>
+        {value ? (
+          <>
+            <div style={{ fontSize: 17, fontWeight: 800, color, marginBottom: sub ? 4 : 0 }}>{value}</div>
+            {sub && <div style={{ fontSize: 13, color: pastel.muted, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{sub}</div>}
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: "#CCC", fontStyle: "italic" }}>Sin definir</div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "0 20px 20px" }}>
+
+      {/* Month badge */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ background: "linear-gradient(135deg, #FFCBA4, #F9C5D1)", borderRadius: 20, padding: "10px 20px", display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 22 }}>👶</span>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B4C4C", textTransform: "uppercase", letterSpacing: "0.06em" }}>Ramona tiene</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#3D2C2C" }}>{guide.month} {guide.month === 1 ? "mes" : "meses"}</div>
+          </div>
+        </div>
+        <button onClick={startEdit} style={{ background: "white", border: `2px solid ${pastel.border}`, borderRadius: 14, padding: "10px 16px", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer", color: pastel.text }}>
+          ✏️ Editar
+        </button>
+      </div>
+
+      {/* Sleep section */}
+      <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: pastel.muted, marginBottom: 12 }}>😴 Siestas</div>
+      <InfoCard icon="⏱" color="#6B4C9E" title="Horas de sueño diurno" value={guide.napHours ? `${guide.napHours} horas al día` : null} />
+      <InfoCard icon="🕐" color="#6B4C9E" title="Horario aproximado" value={null} sub={guide.napSchedule || null}
+        {...(guide.napSchedule ? { value: " ", sub: guide.napSchedule } : {})} />
+
+      {/* Feed section */}
+      <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: pastel.muted, marginBottom: 12, marginTop: 8 }}>🍼 Leche</div>
+      <InfoCard icon="🥛" color="#B05020" title="Cantidad por toma" value={guide.feedOz ? `${guide.feedOz} oz por toma` : null} />
+      <InfoCard icon="🕐" color="#B05020" title="Horario aproximado"
+        {...(guide.feedSchedule ? { value: " ", sub: guide.feedSchedule } : { value: null })} />
+      {guide.feedNotes && (
+        <div style={{ background: "#FFFBF0", border: "2px solid #FFE9B0", borderRadius: 16, padding: "12px 16px", fontSize: 13, color: "#7A5C00", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+          📝 {guide.feedNotes}
+        </div>
+      )}
+
+      {!synced && <div style={{ textAlign: "center", color: pastel.muted, fontSize: 13, marginTop: 16 }}>Cargando...</div>}
+
+      {/* Edit modal */}
+      {editing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={e => e.target === e.currentTarget && setEditing(false)}>
+          <div style={{ background: pastel.bg, borderRadius: "32px 32px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto" }}>
+            <div style={{ width: 40, height: 4, background: "#E0D0C8", borderRadius: 2, margin: "0 auto 20px" }} />
+            <h2 style={{ fontFamily: "Playfair Display, serif", fontSize: 22, marginBottom: 20 }}>✏️ Editar guía de Ramona</h2>
+
+            {/* Month selector */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, marginBottom: 6, display: "block", letterSpacing: "0.05em", textTransform: "uppercase" }}>Mes de Ramona</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {months.map(m => (
+                  <button key={m} onClick={() => setDraft(d => ({ ...d, month: m }))}
+                    style={{ padding: "8px 12px", borderRadius: 12, border: `2px solid ${draft.month === m ? pastel.peach : pastel.border}`, background: draft.month === m ? "#FFF0E8" : "white", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer", color: draft.month === m ? pastel.text : pastel.muted }}>
+                    {m}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", color: pastel.muted, margin: "20px 0 12px" }}>😴 Siestas</div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, marginBottom: 6, display: "block", letterSpacing: "0.05em", textTransform: "uppercase" }}>Horas de sueño diurno</label>
+              <input style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: `2px solid ${pastel.border}`, background: "white", fontFamily: "Nunito, sans-serif", fontSize: 15, color: pastel.text, outline: "none", boxSizing: "border-box" }}
+                placeholder="ej: 3-4" value={draft.napHours} onChange={e => setDraft(d => ({ ...d, napHours: e.target.value }))} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, marginBottom: 6, display: "block", letterSpacing: "0.05em", textTransform: "uppercase" }}>Horario de siestas</label>
+              <textarea style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: `2px solid ${pastel.border}`, background: "white", fontFamily: "Nunito, sans-serif", fontSize: 14, color: pastel.text, outline: "none", resize: "vertical", minHeight: 80, boxSizing: "border-box", lineHeight: 1.6 }}
+                placeholder={"ej:\n9:00am - 10:30am\n1:00pm - 3:00pm"} value={draft.napSchedule} onChange={e => setDraft(d => ({ ...d, napSchedule: e.target.value }))} />
+            </div>
+
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", color: pastel.muted, margin: "20px 0 12px" }}>🍼 Leche</div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, marginBottom: 6, display: "block", letterSpacing: "0.05em", textTransform: "uppercase" }}>Cantidad sugerida por toma (oz)</label>
+              <input style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: `2px solid ${pastel.border}`, background: "white", fontFamily: "Nunito, sans-serif", fontSize: 15, color: pastel.text, outline: "none", boxSizing: "border-box" }}
+                placeholder="ej: 4-5" value={draft.feedOz} onChange={e => setDraft(d => ({ ...d, feedOz: e.target.value }))} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, marginBottom: 6, display: "block", letterSpacing: "0.05em", textTransform: "uppercase" }}>Horario de tomas</label>
+              <textarea style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: `2px solid ${pastel.border}`, background: "white", fontFamily: "Nunito, sans-serif", fontSize: 14, color: pastel.text, outline: "none", resize: "vertical", minHeight: 80, boxSizing: "border-box", lineHeight: 1.6 }}
+                placeholder={"ej:\n7:00am, 10:00am\n1:00pm, 4:00pm, 7:00pm"} value={draft.feedSchedule} onChange={e => setDraft(d => ({ ...d, feedSchedule: e.target.value }))} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, marginBottom: 6, display: "block", letterSpacing: "0.05em", textTransform: "uppercase" }}>Notas adicionales</label>
+              <textarea style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: `2px solid ${pastel.border}`, background: "white", fontFamily: "Nunito, sans-serif", fontSize: 14, color: pastel.text, outline: "none", resize: "vertical", minHeight: 70, boxSizing: "border-box", lineHeight: 1.6 }}
+                placeholder="ej: Toma sólidos 2 veces al día, ofrecer agua..." value={draft.feedNotes} onChange={e => setDraft(d => ({ ...d, feedNotes: e.target.value }))} />
+            </div>
+
+            <button onClick={saveGuide} style={{ width: "100%", padding: 16, borderRadius: 18, border: "none", background: "linear-gradient(135deg, #FFCBA4, #F9C5D1)", fontFamily: "Nunito, sans-serif", fontSize: 16, fontWeight: 800, color: "#3D2C2C", cursor: "pointer", boxShadow: "0 4px 16px rgba(255,140,100,0.3)", marginTop: 8 }}>
+              Guardar guía
+            </button>
+            <button onClick={() => setEditing(false)} style={{ width: "100%", padding: 12, borderRadius: 18, border: "none", background: "none", fontFamily: "Nunito, sans-serif", fontSize: 14, color: pastel.muted, cursor: "pointer", marginTop: 6 }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = `
   ${fonts}
@@ -313,6 +464,7 @@ export default function App() {
           <div className="tab-bar">
             <button className={`tab-btn ${tab === "registro" ? "active" : ""}`} onClick={() => setTab("registro")}>📝 Registro</button>
             <button className={`tab-btn ${tab === "historico" ? "active" : ""}`} onClick={() => setTab("historico")}>📊 Histórico</button>
+            <button className={`tab-btn ${tab === "guia" ? "active" : ""}`} onClick={() => setTab("guia")}>📋 Guía</button>
           </div>
         </div>
 
@@ -366,6 +518,8 @@ export default function App() {
 
         {tab === "historico" && <HistoryTab onSelectDay={date => { setViewDate(date); setTab("registro"); }} />}
 
+        {tab === "guia" && <GuideTab />}
+
         {modal === "feed" && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(null)}>
             <div className="modal">
@@ -408,6 +562,10 @@ export default function App() {
             </div>
           </div>
         )}
+      </div>
+    </>
+  );
+}
       </div>
     </>
   );
