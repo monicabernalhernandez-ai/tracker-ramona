@@ -332,6 +332,430 @@ function GuideTab() {
   );
 }
 
+// ─── Pumping Tab ──────────────────────────────────────────────────────────────
+function PumpingHistoryTab({ onBack }) {
+  const [history, setHistory] = useState({});
+
+  useEffect(() => {
+    const today = new Date();
+    const dates = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return d.toISOString().split("T")[0];
+    });
+    const unsubs = dates.map(date =>
+      onSnapshot(doc(db, "pumping", date), snap => {
+        setHistory(prev => ({ ...prev, [date]: snap.exists() ? (snap.data().pumps || []) : [] }));
+      })
+    );
+    return () => unsubs.forEach(u => u());
+  }, []);
+
+  const days = Object.entries(history)
+    .map(([date, pumps]) => {
+      const done = pumps.filter(p => p.done);
+      const oz = done.filter(p => p.oz).reduce((s, p) => s + parseFloat(p.oz || 0), 0);
+      return { date, count: done.length, oz: +oz.toFixed(1), total: pumps.length };
+    })
+    .filter(d => d.count > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (days.length === 0) return (
+    <div style={{ padding: "0 20px" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: 14, color: pastel.muted, marginBottom: 16, padding: 0 }}>← Volver</button>
+      <div style={{ textAlign: "center", padding: "40px 0", color: pastel.muted, fontSize: 14 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+        Sin datos suficientes todavía
+      </div>
+    </div>
+  );
+
+  const daysWithOz = days.filter(d => d.oz > 0);
+  const avgOz = daysWithOz.length ? +(daysWithOz.reduce((s, d) => s + d.oz, 0) / daysWithOz.length).toFixed(1) : 0;
+  const avgCount = +(days.reduce((s, d) => s + d.count, 0) / days.length).toFixed(1);
+  const maxOz = Math.max(...days.map(d => d.oz), 1);
+  const maxCount = Math.max(...days.map(d => d.count), 1);
+  const bestDay = [...days].sort((a, b) => b.oz - a.oz)[0];
+
+  // Simple correlation: group by count and avg oz
+  const byCount = {};
+  daysWithOz.forEach(d => {
+    if (!byCount[d.count]) byCount[d.count] = [];
+    byCount[d.count].push(d.oz);
+  });
+  const correlation = Object.entries(byCount)
+    .map(([count, ozArr]) => ({ count: +count, avgOz: +(ozArr.reduce((s, v) => s + v, 0) / ozArr.length).toFixed(1) }))
+    .sort((a, b) => a.count - b.count);
+
+  return (
+    <div style={{ padding: "0 20px 20px" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: 14, color: pastel.muted, marginBottom: 16, padding: 0 }}>← Volver al día</button>
+
+      {/* Summary cards */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+        <div style={{ flex: 1, background: "white", borderRadius: 16, padding: "12px 10px", textAlign: "center", border: `2px solid ${pastel.border}`, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#B05020" }}>{avgOz > 0 ? `${avgOz} oz` : "—"}</div>
+          <div style={{ fontSize: 11, color: pastel.muted, marginTop: 2 }}>Promedio/día</div>
+        </div>
+        <div style={{ flex: 1, background: "white", borderRadius: 16, padding: "12px 10px", textAlign: "center", border: `2px solid ${pastel.border}`, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#6B4C9E" }}>{avgCount}x</div>
+          <div style={{ fontSize: 11, color: pastel.muted, marginTop: 2 }}>Extrac./día</div>
+        </div>
+        <div style={{ flex: 1, background: "white", borderRadius: 16, padding: "12px 10px", textAlign: "center", border: `2px solid ${pastel.border}`, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#4CAF50" }}>{days.length}d</div>
+          <div style={{ fontSize: 11, color: pastel.muted, marginTop: 2 }}>Registrados</div>
+        </div>
+      </div>
+
+      {/* Correlation box */}
+      {correlation.length >= 2 && (
+        <div style={{ background: "linear-gradient(135deg, #FFF0E8, #F2EEFF)", borderRadius: 20, padding: "16px", marginBottom: 20, border: `1px solid ${pastel.border}` }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: pastel.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>
+            📈 ¿Más extracciones = más leche?
+          </div>
+          {correlation.map((c, i) => (
+            <div key={c.count} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: pastel.muted, width: 24, textAlign: "right" }}>{c.count}x</div>
+              <div style={{ flex: 1, background: "#F0E8F8", borderRadius: 6, height: 8, overflow: "hidden" }}>
+                <div style={{ width: `${(c.avgOz / Math.max(...correlation.map(x => x.avgOz))) * 100}%`, height: "100%", borderRadius: 6, background: "linear-gradient(90deg, #D4C5F9, #A080E0)", transition: "width 0.5s ease" }} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#6B4C9E", width: 44 }}>{c.avgOz} oz</div>
+            </div>
+          ))}
+          {(() => {
+            const trend = correlation[correlation.length - 1].avgOz > correlation[0].avgOz;
+            return (
+              <div style={{ marginTop: 10, fontSize: 13, color: trend ? "#2E7D32" : "#B05020", fontWeight: 700, background: trend ? "#F0FFF4" : "#FFF3E0", borderRadius: 10, padding: "8px 12px" }}>
+                {trend ? "✅ Sí — a más extracciones, mayor producción" : "🔄 Sin correlación clara todavía — sigue registrando"}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Best day */}
+      {bestDay && bestDay.oz > 0 && (
+        <div style={{ background: "white", borderRadius: 16, padding: "12px 16px", marginBottom: 20, border: `2px solid #B8EAD8`, display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ fontSize: 28 }}>🏆</div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: pastel.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Mejor día</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#2E7D32" }}>{bestDay.oz} oz · {bestDay.count} extracciones</div>
+            <div style={{ fontSize: 11, color: pastel.muted }}>{formatDate(bestDay.date)}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily bars */}
+      <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", color: pastel.muted, marginBottom: 12 }}>Por día</div>
+      {days.map(d => (
+        <div key={d.date} style={{ background: "white", borderRadius: 16, padding: "12px 16px", marginBottom: 8, border: `2px solid ${pastel.border}`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: pastel.text }}>{d.date === todayStr() ? "Hoy" : formatDateShort(d.date)}</div>
+              <div style={{ fontSize: 11, color: pastel.muted }}>{d.count} de {d.total} extracciones</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              {d.oz > 0 && <div style={{ fontSize: 16, fontWeight: 800, color: "#B05020" }}>{d.oz} oz</div>}
+              {d.oz === 0 && <div style={{ fontSize: 12, color: "#CCC", fontStyle: "italic" }}>sin oz</div>}
+            </div>
+          </div>
+          {/* oz bar */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ flex: 1, background: "#F5EDE8", borderRadius: 6, height: 6, overflow: "hidden" }}>
+              <div style={{ width: `${(d.oz / maxOz) * 100}%`, height: "100%", borderRadius: 6, background: "linear-gradient(90deg, #FFCBA4, #F9A060)" }} />
+            </div>
+            <div style={{ flex: 1, background: "#F0E8F8", borderRadius: 6, height: 6, overflow: "hidden" }}>
+              <div style={{ width: `${(d.count / maxCount) * 100}%`, height: "100%", borderRadius: 6, background: "linear-gradient(90deg, #D4C5F9, #A080E0)" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+            <div style={{ flex: 1, fontSize: 10, color: pastel.muted, fontWeight: 600 }}>oz</div>
+            <div style={{ flex: 1, fontSize: 10, color: pastel.muted, fontWeight: 600 }}>extracciones</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PumpingTab() {
+  const today = todayStr();
+  const [baseSchedule, setBaseSchedule] = useState([]);
+  const [dayPumps, setDayPumps] = useState([]);
+  const [viewDate, setViewDate] = useState(today);
+  const [showHistory, setShowHistory] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [draftSchedule, setDraftSchedule] = useState([]);
+  const [newTime, setNewTime] = useState("");
+  const [editingoz, setEditingoz] = useState(null); // id of pump being annotated
+  const [ozInput, setOzInput] = useState("");
+  const [addingExtra, setAddingExtra] = useState(false);
+  const [extraTime, setExtraTime] = useState("");
+
+  // Load base schedule from Firebase config
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "config", "pumpSchedule"), snap => {
+      setBaseSchedule(snap.exists() ? (snap.data().times || []) : []);
+    });
+    return () => unsub();
+  }, []);
+
+  // Load/listen day pumping data
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "pumping", viewDate), snap => {
+      setDayPumps(snap.exists() ? (snap.data().pumps || []) : []);
+    });
+    return () => unsub();
+  }, [viewDate]);
+
+  // When base schedule or date changes, seed day pumps with base times (only for today and if not already seeded)
+  useEffect(() => {
+    if (viewDate !== today) return;
+    if (baseSchedule.length === 0) return;
+    if (dayPumps.length > 0) return; // already has data, don't override
+    const seeded = baseSchedule.map(t => ({ id: t.id, time: t.time, done: false, oz: "" }));
+    saveDayPumps(viewDate, seeded);
+  }, [baseSchedule, viewDate]);
+
+  async function saveDayPumps(date, pumps) {
+    await setDoc(doc(db, "pumping", date), { pumps });
+  }
+
+  async function toggleDone(id) {
+    const updated = dayPumps.map(p => p.id === id ? { ...p, done: !p.done } : p);
+    setDayPumps(updated);
+    await saveDayPumps(viewDate, updated);
+  }
+
+  async function saveOz(id) {
+    const updated = dayPumps.map(p => p.id === id ? { ...p, oz: ozInput } : p);
+    setDayPumps(updated);
+    await saveDayPumps(viewDate, updated);
+    setEditingoz(null); setOzInput("");
+  }
+
+  async function addExtraPump() {
+    if (!extraTime) return;
+    const extra = { id: Date.now(), time: extraTime, done: false, oz: "", extra: true };
+    const updated = [...dayPumps, extra].sort((a, b) => a.time.localeCompare(b.time));
+    setDayPumps(updated);
+    await saveDayPumps(viewDate, updated);
+    setAddingExtra(false); setExtraTime("");
+  }
+
+  async function removeFromDay(id) {
+    const updated = dayPumps.filter(p => p.id !== id);
+    setDayPumps(updated);
+    await saveDayPumps(viewDate, updated);
+  }
+
+  // Schedule editing
+  function openScheduleEdit() { setDraftSchedule([...baseSchedule]); setEditingSchedule(true); }
+  function addDraftTime() {
+    if (!newTime) return;
+    setDraftSchedule(d => [...d, { id: Date.now(), time: newTime }].sort((a, b) => a.time.localeCompare(b.time)));
+    setNewTime("");
+  }
+  function removeDraftTime(id) { setDraftSchedule(d => d.filter(t => t.id !== id)); }
+  async function saveSchedule() {
+    await setDoc(doc(db, "config", "pumpSchedule"), { times: draftSchedule });
+    setBaseSchedule(draftSchedule);
+    setEditingSchedule(false);
+    // Re-seed today if no pumps yet
+    if (dayPumps.length === 0 && viewDate === today) {
+      const seeded = draftSchedule.map(t => ({ id: t.id, time: t.time, done: false, oz: "" }));
+      await saveDayPumps(today, seeded);
+    }
+  }
+
+  function changeDay(delta) {
+    const d = new Date(viewDate + "T12:00:00");
+    d.setDate(d.getDate() + delta);
+    setViewDate(d.toISOString().split("T")[0]);
+  }
+
+  const isToday = viewDate === today;
+  const totalOz = dayPumps.filter(p => p.oz).reduce((s, p) => s + parseFloat(p.oz || 0), 0);
+  const doneCount = dayPumps.filter(p => p.done).length;
+
+  return (
+    <div>
+      {showHistory && <PumpingHistoryTab onBack={() => setShowHistory(false)} />}
+      {!showHistory && <>
+      {/* Date nav */}
+      <div className="date-nav">
+        <button onClick={() => changeDay(-1)}>‹</button>
+        <div className="date-label">{isToday ? "Hoy" : formatDate(viewDate)}</div>
+        <button onClick={() => changeDay(1)} disabled={isToday} style={{ opacity: isToday ? 0.3 : 1 }}>›</button>
+      </div>
+
+      {/* Progress bar */}
+      {dayPumps.length > 0 && (
+        <div style={{ padding: "0 20px 16px" }}>
+          <div style={{ background: "white", borderRadius: 20, padding: "14px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", border: `2px solid ${pastel.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: pastel.text }}>
+                {doneCount} de {dayPumps.length} extracciones
+              </div>
+              {totalOz > 0 && (
+                <div style={{ background: "#FFF0E8", borderRadius: 10, padding: "4px 12px", fontSize: 13, fontWeight: 800, color: "#B05020" }}>
+                  🍼 {totalOz} oz
+                </div>
+              )}
+            </div>
+            <div style={{ background: "#F5EDE8", borderRadius: 8, height: 10, overflow: "hidden" }}>
+              <div style={{
+                width: `${dayPumps.length > 0 ? (doneCount / dayPumps.length) * 100 : 0}%`,
+                height: "100%", borderRadius: 8,
+                background: "linear-gradient(90deg, #FFCBA4, #F9A060)",
+                transition: "width 0.4s ease"
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pump list */}
+      <div style={{ padding: "0 20px" }}>
+        {dayPumps.length === 0 && (
+          <div style={{ textAlign: "center", padding: "30px 20px", color: pastel.muted, fontSize: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>🍼</div>
+            {baseSchedule.length === 0
+              ? "Configura tu horario base con el botón de abajo"
+              : "Sin extracciones para este día"}
+          </div>
+        )}
+
+        {dayPumps.map(p => (
+          <div key={p.id} style={{
+            background: "white", borderRadius: 20, padding: "14px 16px", marginBottom: 10,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.05)",
+            border: `2px solid ${p.done ? "#B8EAD8" : pastel.border}`,
+            display: "flex", alignItems: "center", gap: 12,
+            opacity: p.done ? 0.85 : 1, transition: "all 0.2s",
+          }}>
+            {/* Checkbox */}
+            <button onClick={() => toggleDone(p.id)} style={{
+              width: 28, height: 28, borderRadius: "50%", border: `2px solid ${p.done ? "#4CAF50" : pastel.border}`,
+              background: p.done ? "#4CAF50" : "white", cursor: "pointer", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+              transition: "all 0.2s",
+            }}>
+              {p.done ? "✓" : ""}
+            </button>
+
+            {/* Time & label */}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: p.done ? "#4CAF50" : pastel.text, textDecoration: p.done ? "line-through" : "none" }}>
+                {p.time}
+                {p.extra && <span style={{ marginLeft: 6, fontSize: 10, background: "#F2EEFF", color: "#6B4C9E", borderRadius: 8, padding: "2px 7px", fontWeight: 700, textDecoration: "none" }}>extra</span>}
+              </div>
+              {p.oz && <div style={{ fontSize: 12, color: "#B05020", fontWeight: 700, marginTop: 2 }}>🍼 {p.oz} oz</div>}
+            </div>
+
+            {/* oz button */}
+            {p.done && editingoz !== p.id && (
+              <button onClick={() => { setEditingoz(p.id); setOzInput(p.oz || ""); }} style={{
+                background: "#FFF0E8", border: "none", borderRadius: 10, padding: "6px 10px",
+                fontSize: 12, fontWeight: 700, color: "#B05020", cursor: "pointer",
+              }}>
+                {p.oz ? `${p.oz}oz ✏️` : "+ oz"}
+              </button>
+            )}
+            {editingoz === p.id && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="number" placeholder="oz" value={ozInput} onChange={e => setOzInput(e.target.value)}
+                  style={{ width: 56, padding: "6px 8px", borderRadius: 10, border: `2px solid ${pastel.peach}`, fontFamily: "Nunito, sans-serif", fontSize: 14, fontWeight: 700, outline: "none" }}
+                  autoFocus />
+                <button onClick={() => saveOz(p.id)} style={{ background: pastel.peach, border: "none", borderRadius: 10, padding: "6px 10px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>✓</button>
+              </div>
+            )}
+
+            {/* Remove extra */}
+            {p.extra && !p.done && (
+              <button onClick={() => removeFromDay(p.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#CCC" }}>✕</button>
+            )}
+          </div>
+        ))}
+
+        {/* Add extra pump */}
+        {isToday && !addingExtra && (
+          <button onClick={() => setAddingExtra(true)} style={{
+            width: "100%", padding: "12px", borderRadius: 16, border: `2px dashed ${pastel.border}`,
+            background: "none", fontFamily: "Nunito, sans-serif", fontSize: 13, fontWeight: 700,
+            color: pastel.muted, cursor: "pointer", marginBottom: 10,
+          }}>
+            + Agregar extracción extra
+          </button>
+        )}
+        {addingExtra && (
+          <div style={{ background: "white", borderRadius: 20, padding: "14px 16px", marginBottom: 10, border: `2px solid ${pastel.peach}`, display: "flex", gap: 10, alignItems: "center" }}>
+            <input type="time" value={extraTime} onChange={e => setExtraTime(e.target.value)}
+              style={{ flex: 1, padding: "10px 12px", borderRadius: 12, border: `2px solid ${pastel.border}`, fontFamily: "Nunito, sans-serif", fontSize: 14, outline: "none" }} />
+            <button onClick={addExtraPump} style={{ background: pastel.peach, border: "none", borderRadius: 12, padding: "10px 14px", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>✓</button>
+            <button onClick={() => setAddingExtra(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#CCC" }}>✕</button>
+          </div>
+        )}
+
+        {/* Configure schedule button */}
+        <button onClick={openScheduleEdit} style={{
+          width: "100%", padding: "13px", borderRadius: 16,
+          border: `2px solid ${pastel.border}`, background: "white",
+          fontFamily: "Nunito, sans-serif", fontSize: 13, fontWeight: 700,
+          color: pastel.muted, cursor: "pointer", marginTop: 4, marginBottom: 8,
+        }}>
+          ⚙️ Configurar horario base
+        </button>
+
+        {/* History button */}
+        <button onClick={() => setShowHistory(true)} style={{
+          width: "100%", padding: "13px", borderRadius: 16,
+          border: `2px solid ${pastel.border}`, background: "white",
+          fontFamily: "Nunito, sans-serif", fontSize: 13, fontWeight: 700,
+          color: pastel.muted, cursor: "pointer",
+        }}>
+          📊 Ver histórico y promedios
+        </button>
+      </div>
+
+      {/* Schedule edit modal */}
+      {editingSchedule && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(61,44,44,0.4)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={e => e.target === e.currentTarget && setEditingSchedule(false)}>
+          <div style={{ background: pastel.bg, borderRadius: "32px 32px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ width: 40, height: 4, background: "#E0D0C8", borderRadius: 2, margin: "0 auto 20px" }} />
+            <h2 style={{ fontFamily: "Playfair Display, serif", fontSize: 22, marginBottom: 6 }}>⚙️ Horario base</h2>
+            <p style={{ fontSize: 13, color: pastel.muted, marginBottom: 20 }}>Estas horas se cargan automáticamente cada día como punto de partida.</p>
+
+            {/* Existing times */}
+            {draftSchedule.map(t => (
+              <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "white", borderRadius: 14, padding: "12px 16px", marginBottom: 8, border: `2px solid ${pastel.border}` }}>
+                <span style={{ fontWeight: 800, fontSize: 15, color: pastel.text }}>🕐 {t.time}</span>
+                <button onClick={() => removeDraftTime(t.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#CCC" }}>✕</button>
+              </div>
+            ))}
+
+            {/* Add new time */}
+            <div style={{ display: "flex", gap: 10, marginTop: 12, marginBottom: 20 }}>
+              <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)}
+                style={{ flex: 1, padding: "12px 14px", borderRadius: 14, border: `2px solid ${pastel.border}`, fontFamily: "Nunito, sans-serif", fontSize: 15, outline: "none" }} />
+              <button onClick={addDraftTime} style={{ background: pastel.peach, border: "none", borderRadius: 14, padding: "12px 18px", fontWeight: 800, cursor: "pointer", fontSize: 16 }}>+</button>
+            </div>
+
+            <button onClick={saveSchedule} style={{ width: "100%", padding: 16, borderRadius: 18, border: "none", background: "linear-gradient(135deg, #FFCBA4, #F9C5D1)", fontFamily: "Nunito, sans-serif", fontSize: 16, fontWeight: 800, color: "#3D2C2C", cursor: "pointer", boxShadow: "0 4px 16px rgba(255,140,100,0.3)" }}>
+              Guardar horario
+            </button>
+            <button onClick={() => setEditingSchedule(false)} style={{ width: "100%", padding: 12, borderRadius: 18, border: "none", background: "none", fontFamily: "Nunito, sans-serif", fontSize: 14, color: pastel.muted, cursor: "pointer", marginTop: 6 }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      </>}
+    </div>
+  );
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = `
   ${fonts}
@@ -462,6 +886,7 @@ export default function App() {
           <div className="tab-bar">
             <button className={`tab-btn ${tab === "registro" ? "active" : ""}`} onClick={() => setTab("registro")}>📝 Registro</button>
             <button className={`tab-btn ${tab === "historico" ? "active" : ""}`} onClick={() => setTab("historico")}>📊 Histórico</button>
+            <button className={`tab-btn ${tab === "extracciones" ? "active" : ""}`} onClick={() => setTab("extracciones")}>🍼 Extrac.</button>
             <button className={`tab-btn ${tab === "guia" ? "active" : ""}`} onClick={() => setTab("guia")}>📋 Guía</button>
           </div>
         </div>
@@ -515,6 +940,8 @@ export default function App() {
         </>)}
 
         {tab === "historico" && <HistoryTab onSelectDay={date => { setViewDate(date); setTab("registro"); }} />}
+
+        {tab === "extracciones" && <PumpingTab />}
 
         {tab === "guia" && <GuideTab />}
 
